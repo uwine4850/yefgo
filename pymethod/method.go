@@ -15,7 +15,7 @@ import (
 	"unsafe"
 )
 
-func CallMethod(methodName string, classOrInstance unsafe.Pointer, args ...interface{}) (unsafe.Pointer, error) {
+func CallMethod(pyInit *pyclass.InitPython, methodName string, classOrInstance unsafe.Pointer, args ...interface{}) (unsafe.Pointer, error) {
 	pyMethodName := C.CString(methodName)
 	defer C.free(unsafe.Pointer(pyMethodName))
 	classOrInstanceObj := (*C.PyObject)(classOrInstance)
@@ -26,20 +26,23 @@ func CallMethod(methodName string, classOrInstance unsafe.Pointer, args ...inter
 	defer C.Py_DecRef(pyMethod)
 	methodArgs := C.PyTuple_New(C.long(len(args)))
 	defer C.Py_DecRef(methodArgs)
-	pyargs.InitArgs(unsafe.Pointer(methodArgs), &args)
+	pyargs.InitArgs(pytypes.TuplePtr(methodArgs), &args)
 	res := C.PyObject_CallObject(pyMethod, methodArgs)
+	if res != C.Py_None && res != nil {
+		pyInit.FreeObject(unsafe.Pointer(res))
+	}
 	return unsafe.Pointer(res), nil
 }
 
-func CallClassMethod(methodName string, class *goclass.Class, args ...interface{}) (unsafe.Pointer, error) {
-	return CallMethod(methodName, class.GetClass(), args...)
+func CallClassMethod(pyInit *pyclass.InitPython, methodName string, class *goclass.Class, args ...interface{}) (unsafe.Pointer, error) {
+	return CallMethod(pyInit, methodName, unsafe.Pointer(class.GetClass()), args...)
 }
 
-func CallInstanceMethod(methodName string, class *goclass.Class, args ...interface{}) (unsafe.Pointer, error) {
-	return CallMethod(methodName, class.GetInstance(), args...)
+func CallInstanceMethod(pyInit *pyclass.InitPython, methodName string, class *goclass.Class, args ...interface{}) (unsafe.Pointer, error) {
+	return CallMethod(pyInit, methodName, unsafe.Pointer(class.GetInstance()), args...)
 }
 
-func MethodOutput(pyInit *pyclass.InitPython, _res unsafe.Pointer, output interface{}, pyModule pytypes.PyModule) {
+func MethodOutput(pyInit *pyclass.InitPython, _res unsafe.Pointer, output interface{}) {
 	if reflect.TypeOf(output).Kind() != reflect.Pointer {
 		panic("AAA")
 	}
@@ -61,18 +64,42 @@ func MethodOutput(pyInit *pyclass.InitPython, _res unsafe.Pointer, output interf
 		t := reflect.TypeOf(output).Elem()
 		newStruct := reflect.New(t).Elem()
 		class := goclass.Class{}
-		class.SetInstance(unsafe.Pointer(res))
-		createClass, err := pyclass.GetPyClass(newStruct.Type().Name(), pyModule)
+		class.SetInstance(pytypes.ClassInstance(res))
+		moduleName, err := getPyModuleNameFromInstance(res)
+		if err != nil {
+			panic(err)
+		}
+		newPyModule, err := pyInit.GetPyModule(moduleName)
+		if err != nil {
+			panic(err)
+		}
+		createClass, err := pyclass.GetPyClass(newStruct.Type().Name(), newPyModule)
 		if err != nil {
 			panic(err)
 		}
 		class.SetClass(createClass)
-		class.SetPyModule(pyModule)
-		pyInit.FreeObject(_res)
-		pyInit.FreeObject(createClass)
+		class.SetPyModule(newPyModule)
+		pyInit.FreeObject(unsafe.Pointer(createClass))
 		newStruct.FieldByName("Class").Set(reflect.ValueOf(class))
 		reflect.ValueOf(output).Elem().Set(newStruct)
 	default:
 		panic("unhandled default case")
 	}
+}
+
+func getPyModuleNameFromInstance(instance *C.PyObject) (string, error) {
+	pyModuleAttrName := C.CString("__module__")
+	defer C.free(unsafe.Pointer(pyModuleAttrName))
+
+	pyModuleAttr := C.PyObject_GetAttrString(instance, pyModuleAttrName)
+	if pyModuleAttr == nil {
+		return "", errors.New("failed to get module name attribute")
+	}
+	defer C.Py_DecRef(pyModuleAttr)
+
+	pyModuleName := C.PyUnicode_AsUTF8(pyModuleAttr)
+	if pyModuleName == nil {
+		return "", errors.New("failed to convert module name to string")
+	}
+	return C.GoString(pyModuleName), nil
 }

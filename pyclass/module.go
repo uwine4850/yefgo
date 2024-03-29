@@ -25,7 +25,7 @@ func (ip *InitPython) Finalize() {
 	C.Py_Finalize()
 }
 
-func (ip *InitPython) GetPyModule(name string) (pytypes.PyModule, error) {
+func (ip *InitPython) GetPyModule(name string) (pytypes.Module, error) {
 	pyModuleName := C.CString(name)
 	defer C.free(unsafe.Pointer(pyModuleName))
 
@@ -34,7 +34,7 @@ func (ip *InitPython) GetPyModule(name string) (pytypes.PyModule, error) {
 		return nil, errors.New("failed to import Python module")
 	}
 	ip.FreeObject(unsafe.Pointer(pyModule))
-	return pytypes.PyModule(pyModule), nil
+	return pytypes.Module(pyModule), nil
 }
 
 func (ip *InitPython) FreeObject(obj unsafe.Pointer) {
@@ -52,4 +52,15 @@ func (ip *InitPython) FreeAll() {
 	for i := 0; i < len(ip.mustFreePointer); i++ {
 		C.free(ip.mustFreePointer[i])
 	}
+}
+
+func GetPyObjectByString(obj pytypes.ObjectPtr, name string) (pytypes.ObjectPtr, error) {
+	nameStr := C.CString(name)
+	defer FreeMemory{}.FreePointer(unsafe.Pointer(nameStr))
+
+	pyObj := C.PyObject_GetAttrString((*C.PyObject)(obj), nameStr)
+	if pyObj == nil {
+		return nil, errors.New("failed to get object")
+	}
+	return pytypes.ObjectPtr(pyObj), nil
 }

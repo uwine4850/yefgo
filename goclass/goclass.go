@@ -2,35 +2,34 @@ package goclass
 
 import (
 	"github.com/uwine4850/yefgo/pytypes"
-	"unsafe"
 )
 
 type Class struct {
-	instance unsafe.Pointer
-	class    unsafe.Pointer
-	pyModule pytypes.PyModule
+	instance pytypes.ClassInstance
+	pyClass  pytypes.Class
+	pyModule pytypes.Module
 }
 
-func (p *Class) SetInstance(instance unsafe.Pointer) {
+func (p *Class) SetInstance(instance pytypes.ClassInstance) {
 	p.instance = instance
 }
 
-func (p *Class) SetClass(instance unsafe.Pointer) {
-	p.class = instance
+func (p *Class) SetClass(pyClass pytypes.Class) {
+	p.pyClass = pyClass
 }
 
-func (p *Class) SetPyModule(pyModule pytypes.PyModule) {
+func (p *Class) SetPyModule(pyModule pytypes.Module) {
 	p.pyModule = pyModule
 }
 
-func (p *Class) GetInstance() unsafe.Pointer {
+func (p *Class) GetInstance() pytypes.ClassInstance {
 	return p.instance
 }
 
-func (p *Class) GetClass() unsafe.Pointer {
-	return p.class
+func (p *Class) GetClass() pytypes.Class {
+	return p.pyClass
 }
 
-func (p *Class) GetPyModule() pytypes.PyModule {
+func (p *Class) GetPyModule() pytypes.Module {
 	return p.pyModule
 }

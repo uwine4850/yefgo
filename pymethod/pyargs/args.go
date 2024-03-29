@@ -7,11 +7,12 @@ package pyargs
 import "C"
 import (
 	"github.com/uwine4850/yefgo/goclass"
+	"github.com/uwine4850/yefgo/pytypes"
 	"reflect"
 	"unsafe"
 )
 
-func InitArgs(pyTuple unsafe.Pointer, args *[]interface{}) {
+func InitArgs(pyTuple pytypes.TuplePtr, args *[]interface{}) {
 	tuple := (*C.PyObject)(pyTuple)
 	for i := 0; i < len(*args); i++ {
 		arg := (*args)[i]
