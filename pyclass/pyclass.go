@@ -7,24 +7,12 @@ package pyclass
 import "C"
 import (
 	"errors"
+	"github.com/uwine4850/yefgo/pyclass/memory"
 	"github.com/uwine4850/yefgo/pymethod/pyargs"
 	"github.com/uwine4850/yefgo/pytypes"
-	"unsafe"
 )
 
-type FreeMemory struct {
-}
-
-func (f FreeMemory) FreeObject(obj *C.PyObject) {
-	C.Py_DecRef(obj)
-}
-
-func (f FreeMemory) FreePointer(ptr unsafe.Pointer) {
-	C.free(ptr)
-}
-
 type PyInstance struct {
-	FreeMemory
 	pyInit    *InitPython
 	pyModule  pytypes.Module
 	className string
@@ -37,6 +25,7 @@ func NewPyInstance(pyInit *InitPython, pyModule pytypes.Module, className string
 
 func (p *PyInstance) getInitArgs() *C.PyObject {
 	init := C.PyTuple_New(C.long(len(p.args)))
+	memory.Link.Increment()
 	pyargs.InitArgs(pytypes.TuplePtr(init), &p.args)
 	return init
 }
@@ -46,15 +35,15 @@ func (p *PyInstance) Create() (pytypes.ClassInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer p.FreeObject((*C.PyObject)(pyClass))
+	defer memory.FreeObjectNow(pyClass)
 	init := p.getInitArgs()
-	defer p.FreeObject(init)
+	defer memory.FreeObjectNow(pytypes.ObjectPtr(init))
 
 	pyInstance := C.PyObject_CallObject((*C.PyObject)(pyClass), init)
 	if pyInstance == nil {
 		return nil, errors.New("failed to create instance")
 	}
-	p.pyInit.FreeObject(unsafe.Pointer(pyInstance))
+	memory.Link.Increment()
 	return pytypes.ClassInstance(pyInstance), nil
 }
 

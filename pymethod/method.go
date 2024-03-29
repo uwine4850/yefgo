@@ -9,6 +9,7 @@ import (
 	"errors"
 	"github.com/uwine4850/yefgo/goclass"
 	"github.com/uwine4850/yefgo/pyclass"
+	"github.com/uwine4850/yefgo/pyclass/memory"
 	"github.com/uwine4850/yefgo/pymethod/pyargs"
 	"github.com/uwine4850/yefgo/pytypes"
 	"reflect"
@@ -17,19 +18,23 @@ import (
 
 func CallMethod(pyInit *pyclass.InitPython, methodName string, classOrInstance unsafe.Pointer, args ...interface{}) (unsafe.Pointer, error) {
 	pyMethodName := C.CString(methodName)
-	defer C.free(unsafe.Pointer(pyMethodName))
+	memory.Link.Increment()
+	defer memory.FreePointerNow(unsafe.Pointer(pyMethodName))
 	classOrInstanceObj := (*C.PyObject)(classOrInstance)
 	pyMethod := C.PyObject_GetAttrString(classOrInstanceObj, pyMethodName)
 	if pyMethod == nil {
 		return nil, errors.New("failed to get method")
 	}
-	defer C.Py_DecRef(pyMethod)
+	memory.Link.Increment()
+	defer memory.FreeObjectNow(pytypes.ObjectPtr(pyMethod))
 	methodArgs := C.PyTuple_New(C.long(len(args)))
-	defer C.Py_DecRef(methodArgs)
+	memory.Link.Increment()
+	defer memory.FreeObjectNow(pytypes.ObjectPtr(methodArgs))
 	pyargs.InitArgs(pytypes.TuplePtr(methodArgs), &args)
 	res := C.PyObject_CallObject(pyMethod, methodArgs)
 	if res != C.Py_None && res != nil {
 		pyInit.FreeObject(unsafe.Pointer(res))
+		memory.Link.Increment()
 	}
 	return unsafe.Pointer(res), nil
 }
@@ -55,11 +60,9 @@ func MethodOutput(pyInit *pyclass.InitPython, _res unsafe.Pointer, output interf
 	switch reflect.TypeOf(output).Elem().Kind() {
 	case reflect.String:
 		reflect.ValueOf(output).Elem().SetString(C.GoString(C.PyUnicode_AsUTF8(res)))
-		C.Py_DecRef(res)
 	case reflect.Int:
 		cIntValue := C.PyLong_AsLongLong(res)
 		reflect.ValueOf(output).Elem().SetInt(int64(cIntValue))
-		C.Py_DecRef(res)
 	case reflect.Struct:
 		t := reflect.TypeOf(output).Elem()
 		newStruct := reflect.New(t).Elem()
@@ -69,6 +72,7 @@ func MethodOutput(pyInit *pyclass.InitPython, _res unsafe.Pointer, output interf
 		if err != nil {
 			panic(err)
 		}
+
 		newPyModule, err := pyInit.GetPyModule(moduleName)
 		if err != nil {
 			panic(err)
@@ -77,9 +81,9 @@ func MethodOutput(pyInit *pyclass.InitPython, _res unsafe.Pointer, output interf
 		if err != nil {
 			panic(err)
 		}
+		pyInit.FreeObject(unsafe.Pointer(createClass))
 		class.SetClass(createClass)
 		class.SetPyModule(newPyModule)
-		pyInit.FreeObject(unsafe.Pointer(createClass))
 		newStruct.FieldByName("Class").Set(reflect.ValueOf(class))
 		reflect.ValueOf(output).Elem().Set(newStruct)
 	default:

@@ -7,6 +7,7 @@ package pyclass
 import "C"
 import (
 	"errors"
+	"github.com/uwine4850/yefgo/pyclass/memory"
 	"github.com/uwine4850/yefgo/pytypes"
 	"unsafe"
 )
@@ -34,6 +35,7 @@ func (ip *InitPython) GetPyModule(name string) (pytypes.Module, error) {
 		return nil, errors.New("failed to import Python module")
 	}
 	ip.FreeObject(unsafe.Pointer(pyModule))
+	memory.Link.Increment()
 	return pytypes.Module(pyModule), nil
 }
 
@@ -41,26 +43,25 @@ func (ip *InitPython) FreeObject(obj unsafe.Pointer) {
 	ip.mustFreeObject = append(ip.mustFreeObject, obj)
 }
 
-func (ip *InitPython) FreePointer(ptr unsafe.Pointer) {
-	ip.mustFreePointer = append(ip.mustFreePointer, ptr)
-}
-
 func (ip *InitPython) FreeAll() {
 	for i := 0; i < len(ip.mustFreeObject); i++ {
 		C.Py_DecRef((*C.PyObject)(ip.mustFreeObject[i]))
+		memory.Link.Decrement()
 	}
-	for i := 0; i < len(ip.mustFreePointer); i++ {
-		C.free(ip.mustFreePointer[i])
+	if memory.Link.Get() != 0 {
+		panic("the number of references to RAM is not 0")
 	}
 }
 
 func GetPyObjectByString(obj pytypes.ObjectPtr, name string) (pytypes.ObjectPtr, error) {
 	nameStr := C.CString(name)
-	defer FreeMemory{}.FreePointer(unsafe.Pointer(nameStr))
+	memory.Link.Increment()
+	defer memory.FreePointerNow(unsafe.Pointer(nameStr))
 
 	pyObj := C.PyObject_GetAttrString((*C.PyObject)(obj), nameStr)
 	if pyObj == nil {
 		return nil, errors.New("failed to get object")
 	}
+	memory.Link.Increment()
 	return pytypes.ObjectPtr(pyObj), nil
 }
