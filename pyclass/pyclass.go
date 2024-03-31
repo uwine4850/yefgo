@@ -8,30 +8,30 @@ import "C"
 import (
 	"errors"
 	"github.com/uwine4850/yefgo/pyclass/memory"
-	"github.com/uwine4850/yefgo/pymethod/pyargs"
+	"github.com/uwine4850/yefgo/pyclass/module"
 	"github.com/uwine4850/yefgo/pytypes"
 )
 
 type PyInstance struct {
-	pyInit    *InitPython
+	pyInit    *module.InitPython
 	pyModule  pytypes.Module
 	className string
 	args      []interface{}
 }
 
-func NewPyInstance(pyInit *InitPython, pyModule pytypes.Module, className string, args ...interface{}) *PyInstance {
+func NewPyInstance(pyInit *module.InitPython, pyModule pytypes.Module, className string, args ...interface{}) *PyInstance {
 	return &PyInstance{pyInit: pyInit, pyModule: pyModule, className: className, args: args}
 }
 
 func (p *PyInstance) getInitArgs() *C.PyObject {
 	init := C.PyTuple_New(C.long(len(p.args)))
 	memory.Link.Increment()
-	pyargs.InitArgs(pytypes.TuplePtr(init), &p.args)
+	InitArgs(p.pyInit, pytypes.TuplePtr(init), &p.args)
 	return init
 }
 
 func (p *PyInstance) Create() (pytypes.ClassInstance, error) {
-	pyClass, err := GetPyObjectByString(pytypes.ObjectPtr((*C.PyObject)(p.pyModule)), p.className)
+	pyClass, err := module.GetPyObjectByString(pytypes.ObjectPtr((*C.PyObject)(p.pyModule)), p.className)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (p *PyInstance) Create() (pytypes.ClassInstance, error) {
 }
 
 func GetPyClass(name string, pyModule pytypes.Module) (pytypes.Class, error) {
-	pyClass, err := GetPyObjectByString(pytypes.ObjectPtr((*C.PyObject)(pyModule)), name)
+	pyClass, err := module.GetPyObjectByString(pytypes.ObjectPtr((*C.PyObject)(pyModule)), name)
 	if err != nil {
 		return nil, err
 	}

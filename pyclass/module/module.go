@@ -1,4 +1,4 @@
-package pyclass
+package module
 
 /*
 #include <Python.h>
