@@ -7,8 +7,10 @@ package module
 import "C"
 import (
 	"errors"
+	"fmt"
 	"github.com/uwine4850/yefgo/pyclass/memory"
 	"github.com/uwine4850/yefgo/pytypes"
+	"strconv"
 	"unsafe"
 )
 
@@ -49,7 +51,7 @@ func (ip *InitPython) FreeAll() {
 		memory.Link.Decrement()
 	}
 	if memory.Link.Get() != 0 {
-		panic("the number of references to RAM is not 0")
+		panic(fmt.Sprintf("the number of RAM accesses is %s, not 0", strconv.Itoa(memory.Link.Get())))
 	}
 }
 

@@ -6,6 +6,7 @@ package pyclass
 */
 import "C"
 import (
+	"fmt"
 	"github.com/uwine4850/yefgo/goclass"
 	"github.com/uwine4850/yefgo/pyclass/memory"
 	"github.com/uwine4850/yefgo/pyclass/module"
@@ -43,6 +44,12 @@ func InitArgs(pyInit *module.InitPython, pyTuple pytypes.TuplePtr, args *[]inter
 			pyInit.FreeObject(unsafe.Pointer(pyList))
 			newSlice(pyInit, arg, unsafe.Pointer(pyList))
 			C.PyTuple_SetItem(tuple, C.long(i), pyList)
+		case reflect.Map:
+			pyDict := C.PyDict_New()
+			memory.Link.Increment()
+			pyInit.FreeObject(unsafe.Pointer(pyDict))
+			newMap(pyInit, reflect.ValueOf(arg).MapRange(), unsafe.Pointer(pyDict))
+			C.PyTuple_SetItem(tuple, C.long(i), pyDict)
 		case reflect.TypeOf(&goclass.Class{}).Kind():
 			class := arg.(*goclass.Class)
 			C.PyTuple_SetItem(tuple, C.long(i), (*C.PyObject)(class.GetInstance()))
@@ -82,6 +89,12 @@ func newSlice(pyInit *module.InitPython, arg interface{}, _pyList unsafe.Pointer
 			pyInit.FreeObject(unsafe.Pointer(newPyList))
 			newSlice(pyInit, argSlice.Index(j).Interface(), unsafe.Pointer(newPyList))
 			C.PyList_Append(pyList, newPyList)
+		case reflect.Map:
+			pyDict := C.PyDict_New()
+			memory.Link.Increment()
+			pyInit.FreeObject(unsafe.Pointer(pyDict))
+			newMap(pyInit, argSlice.Index(j).MapRange(), unsafe.Pointer(pyDict))
+			C.PyList_Append(pyList, pyDict)
 		case reflect.TypeOf(&goclass.Class{}).Kind():
 			class := argSlice.Index(j).Interface().(*goclass.Class)
 			C.PyList_Append(pyList, (*C.PyObject)(class.GetInstance()))
@@ -89,4 +102,61 @@ func newSlice(pyInit *module.InitPython, arg interface{}, _pyList unsafe.Pointer
 			panic("unhandled default case")
 		}
 	}
+}
+
+func newMap(pyInit *module.InitPython, arg *reflect.MapIter, pyDict unsafe.Pointer) {
+	pyDictC := (*C.PyObject)(pyDict)
+	for arg.Next() {
+		pyKey := (*C.PyObject)(getMapCObject(pyInit, arg.Key()))
+		pyValue := (*C.PyObject)(getMapCObject(pyInit, arg.Value()))
+		C.PyDict_SetItem(pyDictC, pyKey, pyValue)
+		memory.FreeObjectNow(pytypes.ObjectPtr(pyKey))
+		memory.FreeObjectNow(pytypes.ObjectPtr(pyValue))
+	}
+}
+
+func getMapCObject(pyInit *module.InitPython, _val reflect.Value) pytypes.ObjectPtr {
+	var pyVal pytypes.ObjectPtr
+	var val reflect.Value
+	if _val.Type().Kind() == reflect.Ptr {
+		val = _val.Elem()
+	} else {
+		val = _val
+	}
+	switch val.Type().Kind() {
+	case reflect.String:
+		cVal := C.CString(val.String())
+		pyVal = pytypes.ObjectPtr(C.PyUnicode_FromString(cVal))
+		C.free(unsafe.Pointer(cVal))
+	case reflect.Int:
+		pyVal = pytypes.ObjectPtr(C.PyLong_FromLongLong(C.longlong(val.Int())))
+	case reflect.Float64:
+		pyVal = pytypes.ObjectPtr(C.PyFloat_FromDouble(C.double(val.Float())))
+	case reflect.Bool:
+		var value = val.Bool()
+		var boolValue C.long
+		if value {
+			boolValue = C.long(1)
+		} else {
+			boolValue = C.long(0)
+		}
+		pyVal = pytypes.ObjectPtr(C.PyBool_FromLong(boolValue))
+	case reflect.Slice:
+		pyList := C.PyList_New(0)
+		memory.Link.Increment()
+		pyInit.FreeObject(unsafe.Pointer(pyList))
+		newSlice(pyInit, val.Interface(), unsafe.Pointer(pyList))
+		pyVal = pytypes.ObjectPtr(pyList)
+	case reflect.Map:
+		pyDict := C.PyDict_New()
+		newMap(pyInit, val.MapRange(), unsafe.Pointer(pyDict))
+		pyVal = pytypes.ObjectPtr(pyDict)
+	case reflect.Struct:
+		class := val.Interface().(goclass.Class)
+		pyVal = pytypes.ObjectPtr(class.GetInstance())
+	default:
+		panic(fmt.Sprintf("unhandled map type %s", val.Type().Kind()))
+	}
+	memory.Link.Increment()
+	return pyVal
 }
