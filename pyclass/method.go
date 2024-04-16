@@ -82,6 +82,14 @@ func MethodOutput(pyInit *module.InitPython, _res unsafe.Pointer, output interfa
 		outSlice := makeSliceOfType(reflect.TypeOf(output).Elem().Elem(), listLength)
 		fillOutSlice(outSlice, newSlice)
 		reflect.ValueOf(output).Elem().Set(outSlice)
+	case reflect.Map:
+		mapType := reflect.TypeOf(output).Elem()
+		goMap := reflect.MakeMap(mapType)
+		err := mapOutput(pyInit, &goMap, unsafe.Pointer(res))
+		if err != nil {
+			return err
+		}
+		reflect.ValueOf(output).Elem().Set(goMap)
 	case reflect.Struct:
 		instance, err := createStructFromInstance(pyInit, unsafe.Pointer(res), reflect.TypeOf(output).Elem())
 		if err != nil {
@@ -121,12 +129,19 @@ func sliceOutput(pyInit *module.InitPython, slicePtr interface{}, _res unsafe.Po
 				return err
 			}
 			tempSlice = append(tempSlice, newSlice1)
+		case reflect.Map:
+			mapType := outputType.Elem()
+			goMap := reflect.MakeMap(mapType)
+			err := mapOutput(pyInit, &goMap, unsafe.Pointer(elem))
+			if err != nil {
+				return err
+			}
+			tempSlice = append(tempSlice, goMap)
 		case reflect.Struct:
 			instance, err := createStructFromInstance(pyInit, unsafe.Pointer(elem), outputType.Elem())
 			if err != nil {
 				return err
 			}
-
 			tempSlice = reflect.Append(reflect.ValueOf(tempSlice), reflect.ValueOf(instance)).Interface().([]interface{})
 		default:
 			return errors.New(fmt.Sprintf("unhandled slice type %s", outputType.Elem().Kind().String()))
@@ -161,6 +176,70 @@ func makeSliceOfType(k reflect.Type, length int) reflect.Value {
 	sliceType := reflect.SliceOf(k)
 	slice := reflect.MakeSlice(sliceType, length, length)
 	return slice
+}
+
+func mapOutput(pyInit *module.InitPython, goMap *reflect.Value, _res unsafe.Pointer) error {
+	res := (*C.PyObject)(_res)
+	pyKeys := C.PyDict_Keys(res)
+	keysLen := int(C.PyList_Size(pyKeys))
+	for i := 0; i < keysLen; i++ {
+		key := C.PyList_GetItem(pyKeys, C.long(i))
+		pyValue := C.PyDict_GetItem(res, key)
+		goKey, err := getMapOutputCObject(pyInit, pytypes.ObjectPtr(key), goMap)
+		if err != nil {
+			return err
+		}
+		goVal, err := getMapOutputCObject(pyInit, pytypes.ObjectPtr(pyValue), goMap)
+		if err != nil {
+			return err
+		}
+		goMap.SetMapIndex(goKey, goVal)
+	}
+	return nil
+}
+
+func getMapOutputCObject(pyInit *module.InitPython, pyObject pytypes.ObjectPtr, outputMap *reflect.Value) (reflect.Value, error) {
+	var value reflect.Value
+	cPyObject := (*C.PyObject)(unsafe.Pointer(pyObject))
+	pyType := C.GoString(C.PyUnicode_AsUTF8(C.PyObject_GetAttrString(C.PyObject_Type(cPyObject), C.CString("__name__"))))
+	switch pyType {
+	case "str":
+		value = reflect.ValueOf(C.GoString(C.PyUnicode_AsUTF8(cPyObject)))
+	case "int":
+		value = reflect.ValueOf(int(C.PyLong_AsLongLong(cPyObject)))
+	case "float":
+		value = reflect.ValueOf(float64(C.PyFloat_AsDouble(cPyObject)))
+	case "bool":
+		value = reflect.ValueOf(C.PyObject_IsTrue(cPyObject) != 0)
+	case "list":
+		listLength := int(C.PyList_Size(cPyObject))
+		var newSlice []interface{}
+		err := sliceOutput(pyInit, &newSlice, unsafe.Pointer(cPyObject), listLength, outputMap.Type().Elem())
+		if err != nil {
+			panic(err)
+		}
+		convertedSlice := makeSliceOfType(outputMap.Type().Elem().Elem(), len(newSlice))
+		fillOutSlice(convertedSlice, newSlice)
+		value = convertedSlice
+	case "dict":
+		mapType := outputMap.Type().Elem()
+		goMap := reflect.MakeMap(mapType)
+		err := mapOutput(pyInit, &goMap, unsafe.Pointer(cPyObject))
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		value = goMap
+	default:
+		// Handle struct
+		if outputMap.Type().Elem().Kind() == reflect.Struct {
+			instance, err := createStructFromInstance(pyInit, unsafe.Pointer(cPyObject), outputMap.Type().Elem())
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			value = instance
+		}
+	}
+	return value, nil
 }
 
 func createStructFromInstance(pyInit *module.InitPython, instance unsafe.Pointer, itype reflect.Type) (reflect.Value, error) {
