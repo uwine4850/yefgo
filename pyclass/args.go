@@ -15,6 +15,10 @@ import (
 	"unsafe"
 )
 
+// InitArgs turns golang function arguments into python function arguments.
+// It is important to note that arguments are passed positionally.
+// pyTuple - a reference to a Python tuple to store arguments.
+// args - link to golang argument slice.
 func InitArgs(pyInit *module.InitPython, pyTuple pytypes.TuplePtr, args *[]interface{}) {
 	tuple := (*C.PyObject)(pyTuple)
 	for i := 0; i < len(*args); i++ {
@@ -59,6 +63,9 @@ func InitArgs(pyInit *module.InitPython, pyTuple pytypes.TuplePtr, args *[]inter
 	}
 }
 
+// newSlice recursively creating a new slice.
+// arg - a slice with its elements, possibly other slices.
+// _pyList - link to python list.
 func newSlice(pyInit *module.InitPython, arg interface{}, _pyList unsafe.Pointer) {
 	argSlice := reflect.ValueOf(arg)
 	pyList := (*C.PyObject)(_pyList)
@@ -104,6 +111,7 @@ func newSlice(pyInit *module.InitPython, arg interface{}, _pyList unsafe.Pointer
 	}
 }
 
+// newMap creating a new map.
 func newMap(pyInit *module.InitPython, arg *reflect.MapIter, pyDict unsafe.Pointer) {
 	pyDictC := (*C.PyObject)(pyDict)
 	for arg.Next() {
@@ -115,6 +123,7 @@ func newMap(pyInit *module.InitPython, arg *reflect.MapIter, pyDict unsafe.Point
 	}
 }
 
+// getMapCObject converts a variable to a C object, namely a python data type.
 func getMapCObject(pyInit *module.InitPython, _val reflect.Value) pytypes.ObjectPtr {
 	var pyVal pytypes.ObjectPtr
 	var val reflect.Value

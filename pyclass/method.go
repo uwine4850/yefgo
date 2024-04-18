@@ -16,6 +16,8 @@ import (
 	"unsafe"
 )
 
+// CallMethod calls a function.
+// Depending on the argument passed, parentObject can call either a class method or just a module function.
 func CallMethod(pyInit *module.InitPython, parentObject unsafe.Pointer, methodName string, args ...interface{}) (unsafe.Pointer, error) {
 	pyMethodName := C.CString(methodName)
 	memory.Link.Increment()
@@ -51,6 +53,10 @@ func CallModuleMethod(pyInit *module.InitPython, pyModule pytypes.Module, method
 	return CallMethod(pyInit, unsafe.Pointer(pyModule), methodName, args...)
 }
 
+// MethodOutput processes the result of the CallMethod function and converts it to a golang data type.
+// Places data in the output argument passed as a reference.
+// IMPORTANT: the output argument must be of the type that is expected as output. If the output result is if there is
+// a class, it needs to be passed to the desired golang structure that represents this class.
 func MethodOutput(pyInit *module.InitPython, _res unsafe.Pointer, output interface{}) error {
 	if reflect.TypeOf(output).Kind() != reflect.Pointer {
 		return errors.New("output variable must be a pointer")
@@ -102,6 +108,8 @@ func MethodOutput(pyInit *module.InitPython, _res unsafe.Pointer, output interfa
 	return nil
 }
 
+// sliceOutput processing the slice output.
+// outputType - slice data type.
 func sliceOutput(pyInit *module.InitPython, slicePtr interface{}, _res unsafe.Pointer, listLength int, outputType reflect.Type) error {
 	if reflect.TypeOf(slicePtr).Kind() != reflect.Pointer {
 		panic("slicePtr variable must be a pointer")
@@ -151,6 +159,9 @@ func sliceOutput(pyInit *module.InitPython, slicePtr interface{}, _res unsafe.Po
 	return nil
 }
 
+// fillOutSlice populates a new slice with data from a slice of type interface.
+// For example: outSlice is of type []string, and _newSlice is []interface. This method will move the data from
+// _newSlice to outSlice, thus the data will now be of type []string, rather than []interface.
 func fillOutSlice(outSlice reflect.Value, _newSlice []interface{}) {
 	for i := 0; i < len(_newSlice); i++ {
 		if outSlice.Len() == 0 {
@@ -178,6 +189,7 @@ func makeSliceOfType(k reflect.Type, length int) reflect.Value {
 	return slice
 }
 
+// mapOutput processing map output.
 func mapOutput(pyInit *module.InitPython, goMap *reflect.Value, _res unsafe.Pointer) error {
 	res := (*C.PyObject)(_res)
 	pyKeys := C.PyDict_Keys(res)
@@ -242,6 +254,7 @@ func getMapOutputCObject(pyInit *module.InitPython, pyObject pytypes.ObjectPtr, 
 	return value, nil
 }
 
+// createStructFromInstance creating a structure that represents the passed instance of the python class.
 func createStructFromInstance(pyInit *module.InitPython, instance unsafe.Pointer, itype reflect.Type) (reflect.Value, error) {
 	instanceC := (*C.PyObject)(instance)
 	newStruct := reflect.New(itype).Elem()
@@ -267,6 +280,7 @@ func createStructFromInstance(pyInit *module.InitPython, instance unsafe.Pointer
 	return newStruct, nil
 }
 
+// getPyModuleNameFromInstance returns the name of the module for an instance of the class.
 func getPyModuleNameFromInstance(instance *C.PyObject) (string, error) {
 	pyModuleAttrName := C.CString("__module__")
 	defer C.free(unsafe.Pointer(pyModuleAttrName))

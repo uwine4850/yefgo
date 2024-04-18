@@ -4,6 +4,10 @@ import (
 	"github.com/uwine4850/yefgo/pytypes"
 )
 
+// Class a structure that describes a Python class.
+// instance - Python class instance.
+// pyClass - Python class.
+// pyModule - the module to which the class belongs.
 type Class struct {
 	instance pytypes.ClassInstance
 	pyClass  pytypes.Class
