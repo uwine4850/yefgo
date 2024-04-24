@@ -277,6 +277,7 @@ func createStructFromInstance(pyInit *module.InitPython, instance unsafe.Pointer
 	class.SetClass(createClass)
 	class.SetPyModule(newPyModule)
 	newStruct.FieldByName("Class").Set(reflect.ValueOf(class))
+	newStruct.FieldByName("PyInit").Set(reflect.ValueOf(pyInit))
 	return newStruct, nil
 }
 

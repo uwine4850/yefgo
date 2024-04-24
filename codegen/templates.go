@@ -20,33 +20,33 @@ import (
 const classinit = `
 type {{.StructName}} struct {
 	goclass.Class
-	pyInit *module.InitPython
+	PyInit *module.InitPython
 }
 
 func (n {{.StructName}}) New(pyInit *module.InitPython, pyModule pytypes.Module, {{.Args}}) ({{.StructName}}, error) {
-	n.pyInit = pyInit
-	instance := pyclass.NewPyInstance(n.pyInit, pyModule, "{{.StructName}}", {{.ArgsForFunc}})
+	n.PyInit = pyInit
+	instance := pyclass.NewPyInstance(n.PyInit, pyModule, "{{.StructName}}", {{.ArgsForFunc}})
 	newInstance, err := instance.Create()
 	if err != nil {
 		return {{.StructName}}{}, err
 	}
-	n.pyInit.FreeObject(unsafe.Pointer(newInstance))
+	n.PyInit.FreeObject(unsafe.Pointer(newInstance))
 	n.SetInstance(newInstance)
 
 	class, err := pyclass.GetPyClass("{{.StructName}}", pyModule)
 	if err != nil {
 		return {{.StructName}}{}, err
 	}
-	n.pyInit.FreeObject(unsafe.Pointer(class))
+	n.PyInit.FreeObject(unsafe.Pointer(class))
 	n.SetClass(class)
 	n.SetPyModule(pyModule)
 	return n, nil
 }
 `
 
-const funcInstanceCall = `pyclass.CallInstanceMethod(n.pyInit, &n.Class, "{{.PyFuncName}}", {{.ArgsForFunc}})`
+const funcInstanceCall = `pyclass.CallInstanceMethod(n.PyInit, &n.Class, "{{.PyFuncName}}", {{.ArgsForFunc}})`
 
-const funcClassCall = `pyclass.CallClassMethod(n.pyInit, &n.Class, "{{.PyFuncName}}", {{.ArgsForFunc}})`
+const funcClassCall = `pyclass.CallClassMethod(n.PyInit, &n.Class, "{{.PyFuncName}}", {{.ArgsForFunc}})`
 
 const funcInit = `
 func (n {{.StructName}}) {{.GoFuncName}}({{.Args}}) error {
@@ -65,7 +65,7 @@ func (n {{.StructName}}) {{.GoFuncName}}({{.Args}}) (*{{.OutputType}}, error) {
 		return nil, err
 	}
 	var output {{.OutputType}}
-	err = pyclass.MethodOutput(n.pyInit, res, &output)
+	err = pyclass.MethodOutput(n.PyInit, res, &output)
 	if err != nil {
 		return nil, err
 	}

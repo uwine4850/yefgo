@@ -70,7 +70,7 @@ func yamlArgsAsFuncArgs(args []Arg) string {
 func yamlImportToString(goModule string, imports []string) string {
 	builder := strings.Builder{}
 	for i := 0; i < len(imports); i++ {
-		builder.WriteString(fmt.Sprintf(". \"%s/%s\"", goModule, imports[i]))
+		builder.WriteString(fmt.Sprintf(". \"%s/%s\"\n", goModule, imports[i]))
 	}
 	return builder.String()
 }
