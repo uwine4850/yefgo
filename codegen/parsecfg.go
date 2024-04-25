@@ -22,11 +22,18 @@ type Class struct {
 	Methods map[string]Method `yaml:"methods"`
 }
 
+type Function struct {
+	Name   string `yaml:"name"`
+	Args   []Arg  `yaml:"args"`
+	Output string `yaml:"output"`
+}
+
 type Module struct {
-	Classes  []Class  `yaml:"classes"`
-	GoPkg    string   `yaml:"gopkg"`
-	FileName string   `yaml:"filename"`
-	Import   []string `yaml:"import"`
+	Classes   []Class    `yaml:"classes"`
+	Functions []Function `yaml:"functions"`
+	GoPkg     string     `yaml:"gopkg"`
+	FileName  string     `yaml:"filename"`
+	Import    []string   `yaml:"import"`
 }
 
 type Config struct {

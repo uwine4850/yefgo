@@ -72,3 +72,28 @@ func (n {{.StructName}}) {{.GoFuncName}}({{.Args}}) (*{{.OutputType}}, error) {
 	return &output, nil
 }
 `
+
+const moduleFunc = `
+func {{.Name}}(init *module.InitPython, pyModule pytypes.Module, {{.Args}}) error {
+	_, err := pyclass.CallModuleMethod(init, pyModule, "{{.PyFuncName}}", {{.ArgsForFunc}})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+`
+
+const moduleFuncWithOutput = `
+func {{.Name}}(init *module.InitPython, pyModule pytypes.Module, {{.Args}}) (*{{.OutputType}}, error)  {
+	res, err := pyclass.CallModuleMethod(init, pyModule, "{{.PyFuncName}}", {{.ArgsForFunc}})
+	if err != nil {
+		return nil, err
+	}
+	var output {{.OutputType}}
+	err = pyclass.MethodOutput(init, res, &output)
+	if err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+`

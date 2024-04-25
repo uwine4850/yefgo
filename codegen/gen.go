@@ -11,10 +11,11 @@ import (
 )
 
 type ModuleTemplate struct {
-	GoPkg    string
-	FileName string
-	Import   []string
-	Classes  []ClassTemplate
+	GoPkg     string
+	FileName  string
+	Import    []string
+	Classes   []ClassTemplate
+	Functions []ModuleFuncTemplate
 }
 
 type ArgsClassTemplate struct {
@@ -40,6 +41,19 @@ type ArgsFuncTemplate struct {
 type FuncTemplate struct {
 	Template *template.Template
 	Args     ArgsFuncTemplate
+}
+
+type ArgsFuncModuleTemplate struct {
+	Name        string
+	PyFuncName  string
+	Args        string
+	ArgsForFunc string
+	OutputType  string
+}
+
+type ModuleFuncTemplate struct {
+	Template *template.Template
+	Args     ArgsFuncModuleTemplate
 }
 
 func yamlArgsToString(args []Arg) string {
@@ -122,6 +136,52 @@ func createFuncTemplate(funcName string, className string, funcData Method) Func
 	return funcTemplate
 }
 
+func createModuleFuncTemplate(functions []Function) []ModuleFuncTemplate {
+	modFuncTemplates := make([]ModuleFuncTemplate, 0)
+	for i := 0; i < len(functions); i++ {
+		moduleFuncArgs := ArgsFuncModuleTemplate{
+			Name:        capitalizeFuncName(functions[i].Name),
+			PyFuncName:  functions[i].Name,
+			Args:        yamlArgsToString(functions[i].Args),
+			ArgsForFunc: yamlArgsAsFuncArgs(functions[i].Args),
+			OutputType:  functions[i].Output,
+		}
+		var funcTemp *template.Template
+		if moduleFuncArgs.OutputType == "" {
+			funcTemp = template.Must(template.New("goModuleFunc").Parse(moduleFunc))
+		} else {
+			funcTemp = template.Must(template.New("goModuleFunc").Parse(moduleFuncWithOutput))
+		}
+		modFuncTemplates = append(modFuncTemplates, ModuleFuncTemplate{
+			Template: funcTemp,
+			Args:     moduleFuncArgs,
+		})
+	}
+	return modFuncTemplates
+}
+
+func createClassTemplate(classes []Class) []ClassTemplate {
+	var classTemplates []ClassTemplate
+	for i := 0; i < len(classes); i++ {
+		var args = ArgsClassTemplate{
+			StructName:  classes[i].Name,
+			Args:        yamlArgsToString(classes[i].Args),
+			ArgsForFunc: yamlArgsAsFuncArgs(classes[i].Args),
+		}
+		var classFunctions []FuncTemplate
+		for funcName, funcData := range classes[i].Methods {
+			funcTemplate := createFuncTemplate(funcName, classes[i].Name, funcData)
+			classFunctions = append(classFunctions, funcTemplate)
+		}
+		classTemplates = append(classTemplates, ClassTemplate{
+			Template:  template.Must(template.New("goFile").Parse(classinit)),
+			Args:      args,
+			Functions: classFunctions,
+		})
+	}
+	return classTemplates
+}
+
 func executeTemplates(moduleTemplates []ModuleTemplate, goModuleName string) error {
 	for j := 0; j < len(moduleTemplates); j++ {
 		dirPath := filepath.Join("gen", moduleTemplates[j].GoPkg)
@@ -159,6 +219,14 @@ func executeTemplates(moduleTemplates []ModuleTemplate, goModuleName string) err
 				}
 			}
 		}
+
+		moduleFuncTemplates := moduleTemplates[j].Functions
+		for i := 0; i < len(moduleFuncTemplates); i++ {
+			err = moduleFuncTemplates[i].Template.Execute(file, moduleFuncTemplates[i].Args)
+			if err != nil {
+				return err
+			}
+		}
 		err = file.Close()
 		if err != nil {
 			return err
@@ -173,30 +241,13 @@ func Generate(cfgPath string, goModuleName string) error {
 		return err
 	}
 	var moduleTemplates []ModuleTemplate
-	for _, class := range cfg.Modules {
-		var classTemplates []ClassTemplate
-		for i := 0; i < len(class.Classes); i++ {
-			var args = ArgsClassTemplate{
-				StructName:  class.Classes[i].Name,
-				Args:        yamlArgsToString(class.Classes[i].Args),
-				ArgsForFunc: yamlArgsAsFuncArgs(class.Classes[i].Args),
-			}
-			var classFunctions []FuncTemplate
-			for funcName, funcData := range class.Classes[i].Methods {
-				funcTemplate := createFuncTemplate(funcName, class.Classes[i].Name, funcData)
-				classFunctions = append(classFunctions, funcTemplate)
-			}
-			classTemplates = append(classTemplates, ClassTemplate{
-				Template:  template.Must(template.New("goFile").Parse(classinit)),
-				Args:      args,
-				Functions: classFunctions,
-			})
-		}
+	for _, module := range cfg.Modules {
 		moduleTemplate := ModuleTemplate{
-			GoPkg:    class.GoPkg,
-			FileName: class.FileName,
-			Import:   class.Import,
-			Classes:  classTemplates,
+			GoPkg:     module.GoPkg,
+			FileName:  module.FileName,
+			Import:    module.Import,
+			Classes:   createClassTemplate(module.Classes),
+			Functions: createModuleFuncTemplate(module.Functions),
 		}
 		moduleTemplates = append(moduleTemplates, moduleTemplate)
 	}
