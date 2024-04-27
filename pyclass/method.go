@@ -97,6 +97,13 @@ func MethodOutput(pyInit *module.InitPython, _res unsafe.Pointer, output interfa
 		}
 		reflect.ValueOf(output).Elem().Set(goMap)
 	case reflect.Struct:
+		if reflect.TypeOf(output).Elem() == reflect.TypeOf(DynamicFunc{}) {
+			err := createDynamicFunc(pyInit, output.(*DynamicFunc), unsafe.Pointer(res))
+			if err != nil {
+				return err
+			}
+			return nil
+		}
 		instance, err := createStructFromInstance(pyInit, unsafe.Pointer(res), reflect.TypeOf(output).Elem())
 		if err != nil {
 			return err
@@ -297,4 +304,61 @@ func getPyModuleNameFromInstance(instance *C.PyObject) (string, error) {
 		return "", errors.New("failed to convert module name to string")
 	}
 	return C.GoString(pyModuleName), nil
+}
+
+type DynamicFunc struct {
+	PyInit   *module.InitPython
+	PyModule pytypes.Module
+	Name     string
+}
+
+func (fn *DynamicFunc) Call(args ...interface{}) (*int, error) {
+	res, err := CallModuleMethod(fn.PyInit, fn.PyModule, fn.Name, args...)
+	if err != nil {
+		return nil, err
+	}
+	var output int
+	err = MethodOutput(fn.PyInit, res, &output)
+	if err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
+func getResFuncName(resFunc unsafe.Pointer) (string, error) {
+	fn := (*C.PyObject)(resFunc)
+	funcAttrName := C.CString("__name__")
+	defer C.free(unsafe.Pointer(funcAttrName))
+
+	pyFuncAttr := C.PyObject_GetAttrString(fn, funcAttrName)
+	if pyFuncAttr == nil {
+		return "", errors.New("failed to get func name attribute")
+	}
+	defer C.Py_DecRef(pyFuncAttr)
+
+	pyFuncName := C.PyUnicode_AsUTF8(pyFuncAttr)
+	if pyFuncName == nil {
+		return "", errors.New("failed to convert module name to string")
+	}
+	return C.GoString(pyFuncName), nil
+}
+
+func createDynamicFunc(pyInit *module.InitPython, output *DynamicFunc, resFunc unsafe.Pointer) error {
+	fn := (*C.PyObject)(resFunc)
+	funcName, err := getResFuncName(resFunc)
+	if err != nil {
+		return err
+	}
+	moduleName, err := getPyModuleNameFromInstance(fn)
+	if err != nil {
+		return err
+	}
+	pyModule, err := pyInit.GetPyModule(moduleName)
+	if err != nil {
+		return err
+	}
+	output.PyInit = pyInit
+	output.PyModule = pyModule
+	output.Name = funcName
+	return nil
 }
